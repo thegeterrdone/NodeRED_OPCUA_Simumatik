@@ -1,0 +1,999 @@
+[
+    {
+        "id": "27717c2.72cc384",
+        "type": "tab",
+        "label": "OPCUA Server",
+        "disabled": false,
+        "info": ""
+    },
+    {
+        "id": "6bacea38.3ddc44",
+        "type": "comment",
+        "z": "27717c2.72cc384",
+        "name": "OPC UA Server with Node-RED Variables",
+        "info": "",
+        "x": 200,
+        "y": 40,
+        "wires": []
+    },
+    {
+        "id": "509a22a8.0833cc",
+        "type": "comment",
+        "z": "27717c2.72cc384",
+        "name": "Read tank level",
+        "info": "",
+        "x": 300,
+        "y": 120,
+        "wires": []
+    },
+    {
+        "id": "89143fca0f868b38",
+        "type": "inject",
+        "z": "27717c2.72cc384",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "0.5",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "5",
+        "topic": "ns=1;s=AnalogInput1",
+        "payload": "",
+        "payloadType": "date",
+        "x": 130,
+        "y": 200,
+        "wires": [
+            [
+                "17fed1df7fa5623d"
+            ]
+        ]
+    },
+    {
+        "id": "94d9d2bd97cfd69b",
+        "type": "function",
+        "z": "27717c2.72cc384",
+        "name": "Fix decimal point",
+        "func": "var setpoint = flow.get('setpoint');\nvar msg1 = {};\nvar msg2 = {};\nvar msg3 = {};\n\nmsg1.payload = Number(msg.payload.toFixed(2));\nmsg1.topic = \"Tank Level\";\nflow.set('tanklevel', msg1.payload);\n\n\nmsg2.payload = setpoint;\nmsg2.topic = \"Set-point\";\n\nmsg3.topic = \"Error\";\nmsg3.payload = Math.abs(Number((msg2.payload - msg1.payload).toFixed(2)));\n\nreturn [msg1,msg2,msg3];",
+        "outputs": 3,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1270,
+        "y": 100,
+        "wires": [
+            [
+                "32c86e10d334107a"
+            ],
+            [
+                "32c86e10d334107a"
+            ],
+            [
+                "32c86e10d334107a"
+            ]
+        ]
+    },
+    {
+        "id": "df42717bf0f8bfb7",
+        "type": "OpcUa-Client",
+        "z": "27717c2.72cc384",
+        "endpoint": "39a9a98ad3d46738",
+        "action": "write",
+        "deadbandtype": "a",
+        "deadbandvalue": 1,
+        "time": 10,
+        "timeUnit": "s",
+        "certificate": "n",
+        "localfile": "",
+        "localkeyfile": "",
+        "securitymode": "None",
+        "securitypolicy": "None",
+        "folderName4PKI": "",
+        "name": "",
+        "x": 1300,
+        "y": 300,
+        "wires": [
+            [
+                "af6d5280d5e6acc2"
+            ]
+        ]
+    },
+    {
+        "id": "f2360d9b1f3659d8",
+        "type": "function",
+        "z": "27717c2.72cc384",
+        "name": "PID Logic",
+        "func": "var setpoint = flow.get('setpoint') || 0;\nvar fill = flow.get('fill') || 0;\nvar tanklevel = flow.get('tanklevel') || 0;\nvar oldintegral = flow.get('oldintegral') || 0;\nvar intoutput = flow.get('intoutput') || 0;\nvar opcua = flow.get('opcua');\n\n//Error\nvar error = setpoint - tanklevel;\nflow.set('error', error);\n\n//IntegralOutput\nintoutput= intoutput + error;\nflow.set('intoutput',intoutput);\nvar intoutput = flow.get('intoutput')||0;\n\n//PID Output = (Proportional Gain x error ) + (Integral Gain x Integral output)\nvar pid = (12 * error) + (0.09 * intoutput);\nflow.set('fill', pid);\nflow.set('pid', pid);\n\nif (pid > 100)\n{\n    flow.set('intoutput',oldintegral);\n    flow.set('fill', 100);\n}\n\nif (pid < 0)\n{\n    flow.set('intoutput',oldintegral);\n    flow.set('fill', 0);\n}\nif (opcua != false)\n{\n    flow.set('oldintegral', intoutput);\n    msg.payload = fill;\n    return msg;\n}\nelse\n{\n    flow.set('oldintegral', 0);\n    flow.set('intoutput', 0);\n}\n",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "// Code added here will be run once\n// whenever the node is started.\nglobal.set('oldintegral', 0);\nglobal.set('intoutput', 0);\n",
+        "finalize": "",
+        "libs": [],
+        "x": 340,
+        "y": 300,
+        "wires": [
+            [
+                "147c468e17e53fa0"
+            ]
+        ]
+    },
+    {
+        "id": "bee17b9c9dee41de",
+        "type": "inject",
+        "z": "27717c2.72cc384",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "0.4",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "5",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 130,
+        "y": 300,
+        "wires": [
+            [
+                "f2360d9b1f3659d8"
+            ]
+        ]
+    },
+    {
+        "id": "0322ca72d1719044",
+        "type": "function",
+        "z": "27717c2.72cc384",
+        "name": "Scaling",
+        "func": "var msg1 = {};\nvar msg2 = {};\nvar msg3 = {};\nvar opcua = flow.get('opcua');\n\n\nvar drainvalve = flow.get('drainvalve')||32767;\nvar setpoint = flow.get('setpoint')||0;\n\nif (opcua == true) \n{\n    //filling\n    msg1.topic = 'ns=1;s=AnalogOutput1;datatype=Double';\n    msg1.payload = Number(msg.payload.toFixed(0));\n    //draining\n    msg2.topic = 'ns=1;s=AnalogOutput2;datatype=Double';\n    msg2.payload = drainvalve;\n    //set-point\n    msg3.topic = 'ns=1;s=setpoint;datatype=Double';\n    msg3.payload = setpoint;\n    return [msg1, msg2, msg3]; \n}",
+        "outputs": 3,
+        "noerr": 0,
+        "initialize": "// Code added here will be run once\n// whenever the node is started.\nflow.set('fill', 0);\nflow.set('drain', 0); \nflow.set('oldintegral', 0);\nflow.set('intoutput', 0);\n",
+        "finalize": "",
+        "libs": [],
+        "x": 680,
+        "y": 300,
+        "wires": [
+            [
+                "781d6b47a5be15f1"
+            ],
+            [
+                "781d6b47a5be15f1"
+            ],
+            [
+                "781d6b47a5be15f1"
+            ]
+        ]
+    },
+    {
+        "id": "147c468e17e53fa0",
+        "type": "range",
+        "z": "27717c2.72cc384",
+        "minin": "0",
+        "maxin": "100",
+        "minout": "0",
+        "maxout": "65535",
+        "action": "scale",
+        "round": false,
+        "property": "payload",
+        "name": "",
+        "x": 520,
+        "y": 300,
+        "wires": [
+            [
+                "0322ca72d1719044"
+            ]
+        ]
+    },
+    {
+        "id": "af6d5280d5e6acc2",
+        "type": "debug",
+        "z": "27717c2.72cc384",
+        "name": "debug 4",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1520,
+        "y": 300,
+        "wires": []
+    },
+    {
+        "id": "781d6b47a5be15f1",
+        "type": "delay",
+        "z": "27717c2.72cc384",
+        "name": "",
+        "pauseType": "rate",
+        "timeout": "100",
+        "timeoutUnits": "milliseconds",
+        "rate": "1",
+        "nbRateUnits": "0.1",
+        "rateUnits": "second",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": false,
+        "allowrate": false,
+        "outputs": 1,
+        "x": 930,
+        "y": 300,
+        "wires": [
+            [
+                "df42717bf0f8bfb7"
+            ]
+        ]
+    },
+    {
+        "id": "4ba92de2.13f384",
+        "type": "opcua-compact-server",
+        "z": "27717c2.72cc384",
+        "port": 54845,
+        "endpoint": "",
+        "productUri": "",
+        "acceptExternalCommands": true,
+        "maxAllowedSessionNumber": "10",
+        "maxConnectionsPerEndpoint": "10",
+        "maxAllowedSubscriptionNumber": "100",
+        "alternateHostname": "",
+        "name": "",
+        "showStatusActivities": false,
+        "showErrors": true,
+        "allowAnonymous": true,
+        "individualCerts": false,
+        "isAuditing": false,
+        "serverDiscovery": true,
+        "users": [
+            {
+                "name": "codeandcompile",
+                "password": "G3t344d0n3#"
+            }
+        ],
+        "xmlsetsOPCUA": [],
+        "publicCertificateFile": "",
+        "privateCertificateFile": "",
+        "registerServerMethod": "1",
+        "discoveryServerEndpointUrl": "",
+        "capabilitiesForMDNS": "",
+        "maxNodesPerRead": 1000,
+        "maxNodesPerWrite": 1000,
+        "maxNodesPerHistoryReadData": 100,
+        "maxNodesPerBrowse": 3000,
+        "maxBrowseContinuationPoints": "10",
+        "maxHistoryContinuationPoints": "10",
+        "delayToInit": "1000",
+        "delayToClose": "200",
+        "serverShutdownTimeout": "100",
+        "addressSpaceScript": "function constructAlarmAddressSpace(server, addressSpace, eventObjects, done) {\n  // server = the created node-opcua server\n  // addressSpace = address space of the node-opcua server\n  // eventObjects = add event variables here to hold them in memory from this script\n\n  // internal sandbox objects are:\n  // node = the compact server node,\n  // coreServer = core compact server object for debug and access to NodeOPCUA\n  // this.sandboxNodeContext = node context node-red\n  // this.sandboxFlowContext = flow context node-red\n  // this.sandboxGlobalContext = global context node-red\n  // this.sandboxEnv = env variables\n  // timeout and interval functions as expected from nodejs\n\n  const opcua = coreServer.choreCompact.opcua;\n  const LocalizedText = opcua.LocalizedText;\n  const namespace = addressSpace.getOwnNamespace();\n\n  const Variant = opcua.Variant;\n  const DataType = opcua.DataType;\n  const DataValue = opcua.DataValue;\n\n  var flexServerInternals = this;\n\n  this.sandboxFlowContext.set(\"Input1\", 0);\n\n  this.setInterval(() => {\n    flexServerInternals.sandboxFlowContext.set(\n      \"Input1\",\n      Math.random() + 50.0\n    );\n  }, 500);\n\n  this.sandboxFlowContext.set(\"Input2\", 0);\n  this.sandboxFlowContext.set(\"Input3\", 0);\n  this.sandboxFlowContext.set(\"Input4\", 0);\n  this.sandboxFlowContext.set(\"Input5\", 0);\n  this.sandboxFlowContext.set(\"Input6\", 0);\n  this.sandboxFlowContext.set(\"Input7\", false);\n  this.sandboxFlowContext.set(\"Input8\", \"0\");\n\n  this.sandboxFlowContext.set(\"Output1\", 0);\n  this.setInterval(() => {\n    flexServerInternals.sandboxFlowContext.set(\n      \"Output1\",\n      Math.random() + 10.0\n    );\n  }, 500);\n  this.sandboxFlowContext.set(\"Output0\", 0);\n  this.sandboxFlowContext.set(\"Output2\", 0);\n  this.sandboxFlowContext.set(\"Output3\", 0);\n  this.sandboxFlowContext.set(\"Output4\", 0);\n  this.sandboxFlowContext.set(\"Output5\", 0);\n  this.sandboxFlowContext.set(\"Output6\", 0);\n  this.sandboxFlowContext.set(\"Output7\", 0);\n  this.sandboxFlowContext.set(\"Output8\", 0);\n\n  coreServer.debugLog(\"init dynamic address space\");\n  const rootFolder = addressSpace.findNode(\"RootFolder\");\n\n  node.warn(\"construct new address space for OPC UA\");\n\n  const myDevice = namespace.addFolder(rootFolder.objects, {\n    \"browseName\": \"Node-RED OPC UA Simulation\"\n  });\n  const ioFolder = namespace.addFolder(myDevice, { \"browseName\": \"IO\" });\n  const Inputs = namespace.addFolder(ioFolder, {\n    \"browseName\": \"Inputs\"\n  });\n  const Outputs = namespace.addFolder(ioFolder, {\n    \"browseName\": \"Outputs\"\n  });\n\n  const DI1 = namespace.addVariable({\n    \"organizedBy\": Inputs,\n    \"browseName\": \"I1\",\n    \"nodeId\": \"ns=1;s=Input1\",\n    \"dataType\": \"Double\",\n    \"value\": {\n      \"get\": function () {\n        return new Variant({\n          \"dataType\": DataType.Double,\n          \"value\": flexServerInternals.sandboxFlowContext.get(\"Input1\")\n        });\n      },\n      \"set\": function (variant) {\n        flexServerInternals.sandboxFlowContext.set(\n          \"Input1\",\n          parseFloat(variant.value)\n        );\n        return opcua.StatusCodes.Good;\n      }\n    }\n  });\n\n  const DI2 = namespace.addVariable({\n    \"organizedBy\": Inputs,\n    \"browseName\": \"I2\",\n    \"nodeId\": \"ns=1;s=Input2\",\n    \"dataType\": \"Double\",\n    \"value\": {\n      \"get\": function () {\n        return new Variant({\n          \"dataType\": DataType.Double,\n          \"value\": flexServerInternals.sandboxFlowContext.get(\"Input2\")\n        });\n      },\n      \"set\": function (variant) {\n        flexServerInternals.sandboxFlowContext.set(\n          \"Input2\",\n          parseFloat(variant.value)\n        );\n        return opcua.StatusCodes.Good;\n      }\n    }\n  });\n\n  const DI3 = namespace.addVariable({\n    \"organizedBy\": Inputs,\n    \"browseName\": \"I3\",\n    \"nodeId\": \"ns=1;s=Input3\",\n    \"dataType\": \"Double\",\n    \"value\": {\n      \"get\": function () {\n        return new Variant({\n          \"dataType\": DataType.Double,\n          \"value\": flexServerInternals.sandboxFlowContext.get(\"Input3\")\n        });\n      },\n      \"set\": function (variant) {\n        flexServerInternals.sandboxFlowContext.set(\n          \"Input3\",\n          parseFloat(variant.value)\n        );\n        return opcua.StatusCodes.Good;\n      }\n    }\n  });\n\n  const DI4 = namespace.addVariable({\n    \"organizedBy\": Inputs,\n    \"browseName\": \"I4\",\n    \"nodeId\": \"ns=1;s=Input4\",\n    \"dataType\": \"Double\",\n    \"value\": {\n      \"get\": function () {\n        return new Variant({\n          \"dataType\": DataType.Double,\n          \"value\": flexServerInternals.sandboxFlowContext.get(\"Input4\")\n        });\n      },\n      \"set\": function (variant) {\n        flexServerInternals.sandboxFlowContext.set(\n          \"Input4\",\n          parseFloat(variant.value)\n        );\n        return opcua.StatusCodes.Good;\n      }\n    }\n  });\n\n  const DI5 = namespace.addVariable({\n    \"organizedBy\": Inputs,\n    \"browseName\": \"I5\",\n    \"nodeId\": \"ns=1;s=Input5\",\n    \"dataType\": \"Double\",\n    \"value\": {\n      \"get\": function () {\n        return new Variant({\n          \"dataType\": DataType.Double,\n          \"value\": flexServerInternals.sandboxFlowContext.get(\"Input5\")\n        });\n      },\n      \"set\": function (variant) {\n        flexServerInternals.sandboxFlowContext.set(\n          \"Input5\",\n          parseFloat(variant.value)\n        );\n        return opcua.StatusCodes.Good;\n      }\n    }\n  });\n\n  const DI6 = namespace.addVariable({\n    \"organizedBy\": Inputs,\n    \"browseName\": \"I6\",\n    \"nodeId\": \"ns=1;s=Input6\",\n    \"dataType\": \"Double\",\n    \"value\": {\n      \"get\": function () {\n        return new Variant({\n          \"dataType\": DataType.Double,\n          \"value\": flexServerInternals.sandboxFlowContext.get(\"Input6\")\n        });\n      },\n      \"set\": function (variant) {\n        flexServerInternals.sandboxFlowContext.set(\n          \"Input6\",\n          parseFloat(variant.value)\n        );\n        return opcua.StatusCodes.Good;\n      }\n    }\n  });\n\n  //Boolean\n  const DI7 = namespace.addVariable({\n    \"organizedBy\": Inputs,\n    \"browseName\": \"I7\",\n    \"nodeId\": \"ns=1;s=Input7\",\n    \"dataType\": \"Boolean\",\n    \"value\": {\n      \"get\": function () {\n        return new Variant({\n          \"dataType\": DataType.Boolean,\n          \"value\": flexServerInternals.sandboxFlowContext.get(\"Input7\")\n        });\n      },\n      \"set\": function (variant) {\n        flexServerInternals.sandboxFlowContext.set(\n          \"Input7\", variant.value\n        );\n        return opcua.StatusCodes.Good;\n      }\n    }\n  });\n\n  const DI8 = namespace.addVariable({\n    \"organizedBy\": Inputs,\n    \"browseName\": \"I8\",\n    \"nodeId\": \"ns=1;s=Input8\",\n    \"dataType\": \"String\",\n    \"value\": {\n      \"get\": function () {\n        return new Variant({\n          \"dataType\": DataType.String,\n          \"value\": flexServerInternals.sandboxFlowContext.get(\"Input8\")\n        });\n      },\n      \"set\": function (variant) {\n        flexServerInternals.sandboxFlowContext.set(\n          \"Input8\", variant.value\n        );\n        return opcua.StatusCodes.Good;\n      }\n    }\n  });\n\n  const AI1 = namespace.addVariable({\n    \"organizedBy\": Inputs,\n    \"browseName\": \"AI1\",\n    \"nodeId\": \"ns=1;s=AnalogInput1\",\n    \"dataType\": \"Double\",\n    \"value\": {\n      \"get\": function () {\n        return new Variant({\n          \"dataType\": DataType.Double,\n          \"value\": flexServerInternals.sandboxFlowContext.get(\"AnalogInput1\")\n        });\n      },\n      \"set\": function (variant) {\n        flexServerInternals.sandboxFlowContext.set(\n          \"AnalogInput1\",\n          parseFloat(variant.value)\n        );\n        return opcua.StatusCodes.Good;\n      }\n    }\n  });\n\n  const setpoint = namespace.addVariable({\n    \"organizedBy\": Inputs,\n    \"browseName\": \"setpoint\",\n    \"nodeId\": \"ns=1;s=setpoint\",\n    \"dataType\": \"Double\",\n    \"value\": {\n      \"get\": function () {\n        return new Variant({\n          \"dataType\": DataType.Double,\n          \"value\": flexServerInternals.sandboxFlowContext.get(\"setpoint\")\n        });\n      },\n      \"set\": function (variant) {\n        flexServerInternals.sandboxFlowContext.set(\n          \"setpoint\",\n          parseFloat(variant.value)\n        );\n        return opcua.StatusCodes.Good;\n      }\n    }\n  });\n\n  const AO1 = namespace.addVariable({\n    \"organizedBy\": Outputs,\n    \"browseName\": \"AO1\",\n    \"nodeId\": \"ns=1;s=AnalogOutput1\",\n    \"dataType\": \"Double\",\n    \"value\": {\n      \"get\": function () {\n        return new Variant({\n          \"dataType\": DataType.Double,\n          \"value\": flexServerInternals.sandboxFlowContext.get(\"AnalogOutput1\")\n        });\n      },\n      \"set\": function (variant) {\n        flexServerInternals.sandboxFlowContext.set(\n          \"AnalogOutput1\",\n          parseFloat(variant.value)\n        );\n        return opcua.StatusCodes.Good;\n      }\n    }\n  });\n\n  const AO2 = namespace.addVariable({\n    \"organizedBy\": Outputs,\n    \"browseName\": \"AO2\",\n    \"nodeId\": \"ns=1;s=AnalogOutput2\",\n    \"dataType\": \"Double\",\n    \"value\": {\n      \"get\": function () {\n        return new Variant({\n          \"dataType\": DataType.Double,\n          \"value\": flexServerInternals.sandboxFlowContext.get(\"AnalogOutput2\")\n        });\n      },\n      \"set\": function (variant) {\n        flexServerInternals.sandboxFlowContext.set(\n          \"AnalogOutput2\",\n          parseFloat(variant.value)\n        );\n        return opcua.StatusCodes.Good;\n      }\n    }\n  });\n\n\n  const DOO = namespace.addVariable({\n    \"organizedBy\": Outputs,\n    \"browseName\": \"O0\",\n    \"nodeId\": \"ns=1;s=Output0\",\n    \"dataType\": \"Int16\",\n    \"value\": {\n      \"get\": function () {\n        return new Variant({\n          \"dataType\": DataType.Int16,\n          \"value\": flexServerInternals.sandboxFlowContext.get(\"Output0\")\n        });\n      },\n      \"set\": function (variant) {\n        flexServerInternals.sandboxFlowContext.set(\n          \"Output0\", variant.value\n        );\n        return opcua.StatusCodes.Good;\n      }\n    }\n  });\n\n\n  const DO1 = namespace.addVariable({\n    \"organizedBy\": Outputs,\n    \"browseName\": \"O1\",\n    \"nodeId\": \"ns=1;s=Output1\",\n    \"dataType\": \"Double\",\n    \"value\": {\n      \"get\": function () {\n        return new Variant({\n          \"dataType\": DataType.Double,\n          \"value\": flexServerInternals.sandboxFlowContext.get(\"Output1\")\n        });\n      },\n      \"set\": function (variant) {\n        flexServerInternals.sandboxFlowContext.set(\n          \"Output2\",\n          parseFloat(variant.value)\n        );\n        return opcua.StatusCodes.Good;\n      }\n    }\n  });\n\n  const DO2 = namespace.addVariable({\n    \"organizedBy\": Outputs,\n    \"browseName\": \"O2\",\n    \"nodeId\": \"ns=1;s=Output2\",\n    \"dataType\": \"Double\",\n    \"value\": {\n      \"get\": function () {\n        return new Variant({\n          \"dataType\": DataType.Double,\n          \"value\": flexServerInternals.sandboxFlowContext.get(\"Output2\")\n        });\n      },\n      \"set\": function (variant) {\n        flexServerInternals.sandboxFlowContext.set(\n          \"Output2\",\n          parseFloat(variant.value)\n        );\n        return opcua.StatusCodes.Good;\n      }\n    }\n  });\n\n  const DO3 = namespace.addVariable({\n    \"organizedBy\": Outputs,\n    \"browseName\": \"O3\",\n    \"nodeId\": \"ns=1;s=Output3\",\n    \"dataType\": \"Double\",\n    \"value\": {\n      \"get\": function () {\n        return new Variant({\n          \"dataType\": DataType.Double,\n          \"value\": flexServerInternals.sandboxFlowContext.get(\"Output3\")\n        });\n      },\n      \"set\": function (variant) {\n        flexServerInternals.sandboxFlowContext.set(\n          \"Output3\",\n          parseFloat(variant.value)\n        );\n        return opcua.StatusCodes.Good;\n      }\n    }\n  });\n\n  const DO4 = namespace.addVariable({\n    \"organizedBy\": Outputs,\n    \"browseName\": \"O4\",\n    \"nodeId\": \"ns=1;s=Output4\",\n    \"dataType\": \"Double\",\n    \"value\": {\n      \"get\": function () {\n        return new Variant({\n          \"dataType\": DataType.Double,\n          \"value\": flexServerInternals.sandboxFlowContext.get(\"Output4\")\n        });\n      },\n      \"set\": function (variant) {\n        flexServerInternals.sandboxFlowContext.set(\n          \"Output4\",\n          parseFloat(variant.value)\n        );\n        return opcua.StatusCodes.Good;\n      }\n    }\n  });\n\n  const DO5 = namespace.addVariable({\n    \"organizedBy\": Outputs,\n    \"browseName\": \"O5\",\n    \"nodeId\": \"ns=1;s=Output5\",\n    \"dataType\": \"Double\",\n    \"value\": {\n      \"get\": function () {\n        return new Variant({\n          \"dataType\": DataType.Double,\n          \"value\": flexServerInternals.sandboxFlowContext.get(\"Output5\")\n        });\n      },\n      \"set\": function (variant) {\n        flexServerInternals.sandboxFlowContext.set(\n          \"Output5\",\n          parseFloat(variant.value)\n        );\n        return opcua.StatusCodes.Good;\n      }\n    }\n  });\n\n  const DO6 = namespace.addVariable({\n    \"organizedBy\": Outputs,\n    \"browseName\": \"O6\",\n    \"nodeId\": \"ns=1;s=Output6\",\n    \"dataType\": \"Double\",\n    \"value\": {\n      \"get\": function () {\n        return new Variant({\n          \"dataType\": DataType.Double,\n          \"value\": flexServerInternals.sandboxFlowContext.get(\"Output6\")\n        });\n      },\n      \"set\": function (variant) {\n        flexServerInternals.sandboxFlowContext.set(\n          \"Output6\",\n          parseFloat(variant.value)\n        );\n        return opcua.StatusCodes.Good;\n      }\n    }\n  });\n\n  const DO7 = namespace.addVariable({\n    \"organizedBy\": Outputs,\n    \"browseName\": \"O7\",\n    \"nodeId\": \"ns=1;s=Output7\",\n    \"dataType\": \"Double\",\n    \"value\": {\n      \"get\": function () {\n        return new Variant({\n          \"dataType\": DataType.Double,\n          \"value\": flexServerInternals.sandboxFlowContext.get(\"Output7\")\n        });\n      },\n      \"set\": function (variant) {\n        flexServerInternals.sandboxFlowContext.set(\n          \"Output7\",\n          parseFloat(variant.value)\n        );\n        return opcua.StatusCodes.Good;\n      }\n    }\n  });\n\n  const DO8 = namespace.addVariable({\n    \"organizedBy\": Outputs,\n    \"browseName\": \"O8\",\n    \"nodeId\": \"ns=1;s=Output8\",\n    \"dataType\": \"Double\",\n    \"value\": {\n      \"get\": function () {\n        return new Variant({\n          \"dataType\": DataType.Double,\n          \"value\": flexServerInternals.sandboxFlowContext.get(\"Output8\")\n        });\n      },\n      \"set\": function (variant) {\n        flexServerInternals.sandboxFlowContext.set(\n          \"Output8\",\n          parseFloat(variant.value)\n        );\n        return opcua.StatusCodes.Good;\n      }\n    }\n  });\n\n  //------------------------------------------------------------------------------\n  // Add a view\n  //------------------------------------------------------------------------------\n  const viewDI = namespace.addView({\n    \"organizedBy\": rootFolder.views,\n    \"browseName\": \"RPIW0-Digital-Ins\"\n  });\n\n  const viewDO = namespace.addView({\n    \"organizedBy\": rootFolder.views,\n    \"browseName\": \"RPIW0-Digital-Outs\"\n  });\n\n  viewDI.addReference({\n    \"referenceType\": \"Organizes\",\n    \"nodeId\": DI1.nodeId\n  });\n\n  viewDI.addReference({\n    \"referenceType\": \"Organizes\",\n    \"nodeId\": DI2.nodeId\n  });\n\n  viewDI.addReference({\n    \"referenceType\": \"Organizes\",\n    \"nodeId\": DI3.nodeId\n  });\n\n  viewDI.addReference({\n    \"referenceType\": \"Organizes\",\n    \"nodeId\": DI4.nodeId\n  });\n\n  viewDI.addReference({\n    \"referenceType\": \"Organizes\",\n    \"nodeId\": DI5.nodeId\n  });\n\n  viewDI.addReference({\n    \"referenceType\": \"Organizes\",\n    \"nodeId\": DI6.nodeId\n  });\n\n  viewDI.addReference({\n    \"referenceType\": \"Organizes\",\n    \"nodeId\": DI7.nodeId\n  });\n\n  viewDI.addReference({\n    \"referenceType\": \"Organizes\",\n    \"nodeId\": DI8.nodeId\n  });\n\n  viewDO.addReference({\n    \"referenceType\": \"Organizes\",\n    \"nodeId\": DO1.nodeId\n  });\n\n  viewDO.addReference({\n    \"referenceType\": \"Organizes\",\n    \"nodeId\": DO2.nodeId\n  });\n\n  viewDO.addReference({\n    \"referenceType\": \"Organizes\",\n    \"nodeId\": DO3.nodeId\n  });\n\n  viewDO.addReference({\n    \"referenceType\": \"Organizes\",\n    \"nodeId\": DO4.nodeId\n  });\n\n  viewDO.addReference({\n    \"referenceType\": \"Organizes\",\n    \"nodeId\": DO5.nodeId\n  });\n\n  viewDO.addReference({\n    \"referenceType\": \"Organizes\",\n    \"nodeId\": DO6.nodeId\n  });\n\n  viewDO.addReference({\n    \"referenceType\": \"Organizes\",\n    \"nodeId\": DO7.nodeId\n  });\n\n  viewDO.addReference({\n    \"referenceType\": \"Organizes\",\n    \"nodeId\": DO8.nodeId\n  });\n\n  coreServer.debugLog(\"create dynamic address space done\");\n  node.warn(\"construction of new address space for OPC UA done\");\n\n  done();\n}\n",
+        "x": 120,
+        "y": 120,
+        "wires": []
+    },
+    {
+        "id": "f718ce6565ba9668",
+        "type": "ui_gauge",
+        "z": "27717c2.72cc384",
+        "name": "",
+        "group": "2f17f2577c1a1a0e",
+        "order": 3,
+        "width": 0,
+        "height": 0,
+        "gtype": "wave",
+        "title": "Tank Level",
+        "label": "%",
+        "format": "{{value}}",
+        "min": 0,
+        "max": "100",
+        "colors": [
+            "#00b500",
+            "#e6e600",
+            "#ca3838"
+        ],
+        "seg1": "",
+        "seg2": "",
+        "className": "",
+        "x": 1270,
+        "y": 160,
+        "wires": []
+    },
+    {
+        "id": "32c86e10d334107a",
+        "type": "ui_chart",
+        "z": "27717c2.72cc384",
+        "name": "",
+        "group": "5009ece390e6c68a",
+        "order": 1,
+        "width": 0,
+        "height": 0,
+        "label": "Tank Measurements",
+        "chartType": "line",
+        "legend": "true",
+        "xformat": "HH:mm:ss",
+        "interpolate": "linear",
+        "nodata": "",
+        "dot": false,
+        "ymin": "0",
+        "ymax": "100",
+        "removeOlder": "2",
+        "removeOlderPoints": "",
+        "removeOlderUnit": "60",
+        "cutout": 0,
+        "useOneColor": false,
+        "useUTC": false,
+        "colors": [
+            "#ee9949",
+            "#28cc67",
+            "#ff0f0f",
+            "#2ca02c",
+            "#98df8a",
+            "#d62728",
+            "#ff9896",
+            "#9467bd",
+            "#c5b0d5"
+        ],
+        "outputs": 1,
+        "useDifferentColor": false,
+        "className": "",
+        "x": 1520,
+        "y": 100,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "17fed1df7fa5623d",
+        "type": "function",
+        "z": "27717c2.72cc384",
+        "name": "Scaling",
+        "func": "\nvar msg1 = {};\nvar msg2 = {};\nvar msg3 = {};\n\nvar opcua = flow.get('opcua');\nif (opcua == true)\n{\n    //filling\n    msg1.topic = 'ns=1;s=AnalogOutput1;datatype=Double';\n    //draining\n    msg2.topic = 'ns=1;s=AnalogOutput2;datatype=Double';\n    msg3.topic = 'ns=1;s=AnalogInput1';\n    return [msg1, msg2, msg3];\n}\n \n",
+        "outputs": 3,
+        "noerr": 0,
+        "initialize": "// Code added here will be run once\n// whenever the node is started.\nflow.set('fill', 0);\nflow.set('drain', 0); \nflow.set('oldintegral', 0);\nflow.set('intoutput', 0);\n",
+        "finalize": "",
+        "libs": [],
+        "x": 320,
+        "y": 200,
+        "wires": [
+            [
+                "50ce55be25ec3c90"
+            ],
+            [
+                "50ce55be25ec3c90"
+            ],
+            [
+                "50ce55be25ec3c90"
+            ]
+        ]
+    },
+    {
+        "id": "50ce55be25ec3c90",
+        "type": "delay",
+        "z": "27717c2.72cc384",
+        "name": "",
+        "pauseType": "rate",
+        "timeout": "100",
+        "timeoutUnits": "milliseconds",
+        "rate": "1",
+        "nbRateUnits": "0.1",
+        "rateUnits": "second",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": false,
+        "allowrate": false,
+        "outputs": 1,
+        "x": 530,
+        "y": 200,
+        "wires": [
+            [
+                "2cc7e2a9fbb58637"
+            ]
+        ]
+    },
+    {
+        "id": "2cc7e2a9fbb58637",
+        "type": "OpcUa-Client",
+        "z": "27717c2.72cc384",
+        "endpoint": "39a9a98ad3d46738",
+        "action": "read",
+        "deadbandtype": "a",
+        "deadbandvalue": 1,
+        "time": 10,
+        "timeUnit": "s",
+        "certificate": "n",
+        "localfile": "",
+        "localkeyfile": "",
+        "securitymode": "None",
+        "securitypolicy": "None",
+        "folderName4PKI": "",
+        "name": "",
+        "x": 740,
+        "y": 200,
+        "wires": [
+            [
+                "04922006869ba941"
+            ]
+        ]
+    },
+    {
+        "id": "371855d8aa2fed1b",
+        "type": "range",
+        "z": "27717c2.72cc384",
+        "minin": "0",
+        "maxin": "65535",
+        "minout": "0",
+        "maxout": "100",
+        "action": "scale",
+        "round": false,
+        "property": "payload",
+        "name": "",
+        "x": 1100,
+        "y": 160,
+        "wires": [
+            [
+                "f718ce6565ba9668",
+                "94d9d2bd97cfd69b"
+            ]
+        ]
+    },
+    {
+        "id": "04922006869ba941",
+        "type": "switch",
+        "z": "27717c2.72cc384",
+        "name": "",
+        "property": "topic",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "cont",
+                "v": "AnalogInput1",
+                "vt": "str"
+            },
+            {
+                "t": "cont",
+                "v": "AnalogOutput1",
+                "vt": "str"
+            },
+            {
+                "t": "cont",
+                "v": "AnalogOutput2",
+                "vt": "str"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 3,
+        "x": 930,
+        "y": 200,
+        "wires": [
+            [
+                "371855d8aa2fed1b"
+            ],
+            [
+                "8b712621f6db25c3"
+            ],
+            [
+                "bfc004abd379219e"
+            ]
+        ]
+    },
+    {
+        "id": "8b712621f6db25c3",
+        "type": "range",
+        "z": "27717c2.72cc384",
+        "minin": "0",
+        "maxin": "65535",
+        "minout": "0",
+        "maxout": "100",
+        "action": "scale",
+        "round": false,
+        "property": "payload",
+        "name": "",
+        "x": 1100,
+        "y": 200,
+        "wires": [
+            [
+                "942b45f54098ab81"
+            ]
+        ]
+    },
+    {
+        "id": "bfc004abd379219e",
+        "type": "range",
+        "z": "27717c2.72cc384",
+        "minin": "0",
+        "maxin": "65535",
+        "minout": "0",
+        "maxout": "100",
+        "action": "scale",
+        "round": false,
+        "property": "payload",
+        "name": "",
+        "x": 1100,
+        "y": 240,
+        "wires": [
+            [
+                "0fe45c15dd4723ba"
+            ]
+        ]
+    },
+    {
+        "id": "942b45f54098ab81",
+        "type": "ui_gauge",
+        "z": "27717c2.72cc384",
+        "name": "",
+        "group": "2f17f2577c1a1a0e",
+        "order": 1,
+        "width": 0,
+        "height": 0,
+        "gtype": "gage",
+        "title": "Fill valve",
+        "label": "%",
+        "format": "{{value | number:2}}",
+        "min": 0,
+        "max": "100",
+        "colors": [
+            "#00b500",
+            "#e6e600",
+            "#ca3838"
+        ],
+        "seg1": "",
+        "seg2": "",
+        "className": "",
+        "x": 1280,
+        "y": 200,
+        "wires": []
+    },
+    {
+        "id": "0fe45c15dd4723ba",
+        "type": "ui_gauge",
+        "z": "27717c2.72cc384",
+        "name": "",
+        "group": "2f17f2577c1a1a0e",
+        "order": 2,
+        "width": 0,
+        "height": 0,
+        "gtype": "gage",
+        "title": "Drain valve",
+        "label": "%",
+        "format": "{{value | number:2}}",
+        "min": 0,
+        "max": "100",
+        "colors": [
+            "#00b500",
+            "#e6e600",
+            "#ca3838"
+        ],
+        "seg1": "",
+        "seg2": "",
+        "className": "",
+        "x": 1270,
+        "y": 240,
+        "wires": []
+    },
+    {
+        "id": "2065e38f5f3be960",
+        "type": "ui_slider",
+        "z": "27717c2.72cc384",
+        "name": "",
+        "label": "Drain Valve (Manual)",
+        "tooltip": "",
+        "group": "bebabc066b0c69a9",
+        "order": 4,
+        "width": 0,
+        "height": 0,
+        "passthru": true,
+        "outs": "end",
+        "topic": "topic",
+        "topicType": "msg",
+        "min": 0,
+        "max": "100",
+        "step": 1,
+        "className": "",
+        "x": 140,
+        "y": 380,
+        "wires": [
+            [
+                "285540993abff544"
+            ]
+        ]
+    },
+    {
+        "id": "285540993abff544",
+        "type": "range",
+        "z": "27717c2.72cc384",
+        "minin": "0",
+        "maxin": "100",
+        "minout": "0",
+        "maxout": "65535",
+        "action": "scale",
+        "round": false,
+        "property": "payload",
+        "name": "",
+        "x": 340,
+        "y": 380,
+        "wires": [
+            [
+                "ef82b9b778db438f"
+            ]
+        ]
+    },
+    {
+        "id": "ef82b9b778db438f",
+        "type": "function",
+        "z": "27717c2.72cc384",
+        "name": "function 3",
+        "func": "flow.set('drainvalve',msg.payload);",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 520,
+        "y": 380,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "a71c684d7d5f3490",
+        "type": "ui_slider",
+        "z": "27717c2.72cc384",
+        "name": "",
+        "label": "Set-Point (Manual)",
+        "tooltip": "",
+        "group": "bebabc066b0c69a9",
+        "order": 3,
+        "width": 0,
+        "height": 0,
+        "passthru": true,
+        "outs": "end",
+        "topic": "topic",
+        "topicType": "msg",
+        "min": 0,
+        "max": "100",
+        "step": 1,
+        "className": "",
+        "x": 130,
+        "y": 440,
+        "wires": [
+            [
+                "b61bb6745134d784"
+            ]
+        ]
+    },
+    {
+        "id": "b61bb6745134d784",
+        "type": "function",
+        "z": "27717c2.72cc384",
+        "name": "function 4",
+        "func": "flow.set('setpoint',msg.payload);\nflow.set('oldintegral', 0);\nflow.set('intoutput', 0);",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 520,
+        "y": 440,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "b7d0c5a7952c8832",
+        "type": "ui_button",
+        "z": "27717c2.72cc384",
+        "name": "",
+        "group": "bebabc066b0c69a9",
+        "order": 1,
+        "width": "4",
+        "height": "1",
+        "passthru": false,
+        "label": "Mixer ON",
+        "tooltip": "",
+        "color": "black",
+        "bgcolor": "lime",
+        "className": "",
+        "icon": "",
+        "payload": "32",
+        "payloadType": "num",
+        "topic": "topic",
+        "topicType": "msg",
+        "x": 920,
+        "y": 360,
+        "wires": [
+            [
+                "486e308486e33b9b"
+            ]
+        ]
+    },
+    {
+        "id": "63cb334b2d20c166",
+        "type": "ui_button",
+        "z": "27717c2.72cc384",
+        "name": "",
+        "group": "bebabc066b0c69a9",
+        "order": 2,
+        "width": "4",
+        "height": "1",
+        "passthru": false,
+        "label": "Mixer OFF",
+        "tooltip": "",
+        "color": "",
+        "bgcolor": "red",
+        "className": "",
+        "icon": "",
+        "payload": "0",
+        "payloadType": "num",
+        "topic": "topic",
+        "topicType": "msg",
+        "x": 930,
+        "y": 400,
+        "wires": [
+            [
+                "486e308486e33b9b"
+            ]
+        ]
+    },
+    {
+        "id": "486e308486e33b9b",
+        "type": "function",
+        "z": "27717c2.72cc384",
+        "name": "function 5",
+        "func": "msg.topic = 'ns=1;s=Output0;datatype=Int16';\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1080,
+        "y": 360,
+        "wires": [
+            [
+                "df42717bf0f8bfb7"
+            ]
+        ]
+    },
+    {
+        "id": "2a6b4d409899d55e",
+        "type": "ui_switch",
+        "z": "27717c2.72cc384",
+        "name": "",
+        "label": "Activate OPC UA",
+        "tooltip": "",
+        "group": "bebabc066b0c69a9",
+        "order": 1,
+        "width": 0,
+        "height": 0,
+        "passthru": true,
+        "decouple": "false",
+        "topic": "topic",
+        "topicType": "msg",
+        "style": "",
+        "onvalue": "true",
+        "onvalueType": "bool",
+        "onicon": "",
+        "oncolor": "",
+        "offvalue": "false",
+        "offvalueType": "bool",
+        "officon": "",
+        "offcolor": "",
+        "animate": false,
+        "className": "",
+        "x": 950,
+        "y": 440,
+        "wires": [
+            [
+                "4c62bbeb8cd1017a"
+            ]
+        ]
+    },
+    {
+        "id": "4c62bbeb8cd1017a",
+        "type": "function",
+        "z": "27717c2.72cc384",
+        "name": "function 6",
+        "func": "flow.set('opcua', msg.payload);\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1180,
+        "y": 440,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "e7dfbcd5ea4cdc22",
+        "type": "ui_table",
+        "z": "27717c2.72cc384",
+        "group": "5009ece390e6c68a",
+        "name": "",
+        "order": 3,
+        "width": "8",
+        "height": "1",
+        "columns": [
+            {
+                "field": "Set-Point",
+                "title": "Set-Point",
+                "width": "",
+                "align": "center",
+                "formatter": "plaintext",
+                "formatterParams": {
+                    "target": "_blank"
+                }
+            },
+            {
+                "field": "Tank Level",
+                "title": "Tank Level",
+                "width": "",
+                "align": "center",
+                "formatter": "plaintext",
+                "formatterParams": {
+                    "target": "_blank"
+                }
+            },
+            {
+                "field": "Error",
+                "title": "Error",
+                "width": "",
+                "align": "center",
+                "formatter": "plaintext",
+                "formatterParams": {
+                    "target": "_blank"
+                }
+            }
+        ],
+        "outputs": 0,
+        "cts": false,
+        "x": 930,
+        "y": 500,
+        "wires": []
+    },
+    {
+        "id": "894f6acc219372a8",
+        "type": "inject",
+        "z": "27717c2.72cc384",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "1",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 570,
+        "y": 520,
+        "wires": [
+            [
+                "681af31f3b6559de"
+            ]
+        ]
+    },
+    {
+        "id": "681af31f3b6559de",
+        "type": "function",
+        "z": "27717c2.72cc384",
+        "name": "function 7",
+        "func": "var setpoint = flow.get('setpoint');\nvar tanklevel = flow.get('tanklevel');\nvar error = flow.get('error');\nmsg.payload = \n[\n    {\n        \"Set-Point\": setpoint,\n        \"Tank Level\": tanklevel,\n        \"Error\": Math.abs(Number(error.toFixed(2))),\n    }\n]\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 760,
+        "y": 520,
+        "wires": [
+            [
+                "e7dfbcd5ea4cdc22"
+            ]
+        ]
+    },
+    {
+        "id": "f8a1103306d8efb3",
+        "type": "ui_button",
+        "z": "27717c2.72cc384",
+        "name": "",
+        "group": "5009ece390e6c68a",
+        "order": 2,
+        "width": "0",
+        "height": "0",
+        "passthru": false,
+        "label": "Refresh ",
+        "tooltip": "",
+        "color": "black",
+        "bgcolor": "lime",
+        "className": "",
+        "icon": "",
+        "payload": "[]",
+        "payloadType": "json",
+        "topic": "topic",
+        "topicType": "msg",
+        "x": 1300,
+        "y": 40,
+        "wires": [
+            [
+                "32c86e10d334107a"
+            ]
+        ]
+    },
+    {
+        "id": "39a9a98ad3d46738",
+        "type": "OpcUa-Endpoint",
+        "endpoint": "opc.tcp://localhost:54845",
+        "secpol": "None",
+        "secmode": "None",
+        "none": true,
+        "login": false,
+        "usercert": false,
+        "usercertificate": "",
+        "userprivatekey": ""
+    },
+    {
+        "id": "2f17f2577c1a1a0e",
+        "type": "ui_group",
+        "name": "System Info",
+        "tab": "d268dde9d1493e3a",
+        "order": 2,
+        "disp": true,
+        "width": "6",
+        "collapse": false,
+        "className": ""
+    },
+    {
+        "id": "5009ece390e6c68a",
+        "type": "ui_group",
+        "name": "Tank Level Control and Mixing System",
+        "tab": "d268dde9d1493e3a",
+        "order": 1,
+        "disp": true,
+        "width": "8",
+        "collapse": false,
+        "className": ""
+    },
+    {
+        "id": "bebabc066b0c69a9",
+        "type": "ui_group",
+        "name": "Controls",
+        "tab": "d268dde9d1493e3a",
+        "order": 3,
+        "disp": true,
+        "width": "8",
+        "collapse": false,
+        "className": ""
+    },
+    {
+        "id": "d268dde9d1493e3a",
+        "type": "ui_tab",
+        "name": "Simumatik ",
+        "icon": "dashboard",
+        "disabled": false,
+        "hidden": false
+    }
+]
